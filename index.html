@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sepsis Interactive Case - Morning Meeting 2026/02/09</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft JhengHei',sans-serif;background:#f1f5f9;color:#1e293b;font-size:15px;line-height:1.5}
+.container{height:100vh;display:flex;flex-direction:column;padding:6px 12px;max-width:1100px;margin:0 auto}
+/* Patient bar */
+.patient-bar{background:#1e3a5f;color:#e2e8f0;padding:4px 14px;border-radius:6px;margin-bottom:4px;font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px;flex-shrink:0}
+.patient-bar b{color:#93c5fd}
+/* Progress */
+.progress{display:flex;gap:3px;margin-bottom:4px;flex-shrink:0}
+.prog-step{flex:1;height:4px;border-radius:2px;background:#e2e8f0}
+.prog-step.done{background:#22c55e}
+.prog-step.active{background:#3b82f6}
+/* Vitals monitor */
+.vitals{background:#0f172a;padding:6px 14px;border-radius:6px;display:flex;justify-content:space-around;gap:6px;margin-bottom:8px;font-family:'Courier New',monospace;text-align:center;flex-shrink:0}
+.vitem{display:flex;align-items:center;gap:4px}
+.vitem .vlab{font-size:10px;color:#94a3b8;text-transform:uppercase}
+.vitem .vval{font-size:18px;font-weight:bold}
+.vgreen{color:#22c55e}.vred{color:#ef4444}.vcyan{color:#06b6d4}.vyellow{color:#eab308}.vorange{color:#f97316}
+/* Scene card */
+.card{background:#fff;padding:12px 18px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.card h2{font-size:18px;color:#1e3a5f;margin-bottom:6px;border-bottom:2px solid #e2e8f0;padding-bottom:4px;flex-shrink:0}
+/* Two-column layout for image scenes */
+.split{display:flex;gap:14px;flex:1;min-height:0}
+.split-img{flex:0 0 45%;display:flex;align-items:center;justify-content:center;min-height:0}
+.split-img img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0}
+.split-body{flex:1;display:flex;flex-direction:column;min-height:0}
+/* Narrative */
+.narrative{margin-bottom:6px;flex-shrink:1;overflow-y:auto;min-height:0}
+.narrative p{margin-bottom:6px}
+.narrative ul{margin:4px 0 4px 18px}
+.narrative li{margin-bottom:2px}
+.highlight{background:#fef9c3;padding:1px 4px;border-radius:3px}
+.critical{color:#dc2626;font-weight:bold}
+.scene-img{margin:6px 0;text-align:center;flex-shrink:0}
+.scene-img img{max-width:100%;max-height:180px;border-radius:6px;border:1px solid #e2e8f0}
+/* Inline image for intro */
+.inline-img{float:right;margin:0 0 6px 12px;max-width:280px}
+.inline-img img{width:100%;border-radius:6px;border:1px solid #e2e8f0}
+/* Choices */
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:auto;padding-top:6px;flex-shrink:0}
+.choices.single-col{grid-template-columns:1fr}
+.cbtn{display:flex;align-items:center;padding:8px 10px;text-align:left;font-size:13px;border:2px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-family:inherit;line-height:1.4}
+.cbtn:hover{border-color:#3b82f6;background:#f0f7ff}
+.cbtn .key{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;background:#e2e8f0;margin-right:8px;font-weight:bold;font-size:12px;flex-shrink:0}
+/* Outcome cards */
+.outcome-best{border-left:4px solid #22c55e}
+.outcome-dialysis{border-left:4px solid #f59e0b}
+.outcome-ihca{border-left:4px solid #f97316}
+.outcome-death{border-left:4px solid #dc2626}
+/* Debrief - scrollable */
+.debrief-wrap{flex:1;overflow-y:auto;min-height:0}
+.debrief-section{margin-bottom:16px}
+.debrief-section h3{font-size:15px;color:#1e3a5f;margin-bottom:4px}
+.debrief-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
+.debrief-table th,.debrief-table td{padding:4px 8px;border:1px solid #e2e8f0;text-align:left}
+.debrief-table th{background:#f1f5f9}
+.tag-correct{color:#16a34a;font-weight:bold}
+.tag-wrong{color:#dc2626;font-weight:bold}
+.tp-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px;margin-bottom:8px;font-size:13px}
+.tp-box h4{color:#1e40af;margin-bottom:4px}
+/* Restart btn */
+.restart-btn{display:inline-block;padding:6px 18px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;margin-top:8px}
+.restart-btn:hover{background:#1e40af}
+</style>
+</head>
+<body>
+<div class="container" id="app"></div>
+<script>
+// ======================== STATE ========================
+const S = {
+  abCorrect: false, abName: '',
+  sourceControl: false, echoFound: false,
+  timelyIntubation: false, abgChecked: false,
+  shockChoice: '', sourceChoice: '', respChoice: '', refractoryChoice: '',
+  scene: 'intro',
+  decisions: []
+};
+
+function resetState(){
+  S.abCorrect=false; S.abName=''; S.sourceControl=false; S.echoFound=false;
+  S.timelyIntubation=false; S.abgChecked=false; S.shockChoice=''; S.sourceChoice=''; S.respChoice=''; S.refractoryChoice='';
+  S.scene='intro'; S.decisions=[]; freetextTries=0;
+}
+
+// ======================== SCENE DATA ========================
+function scene(id){
+  switch(id){
+
+case 'intro': return {
+  title:'初始處置 — 經驗性抗生素選擇', stage:1,
+  vitals:{hr:113,bp:'110/73',spo2:96,rr:20,temp:39.9,map:85},
+  img:'Previous_culture.jpg',
+  html:`<p><b>69M</b>｜PMH：CAD, 左輸尿管結石併腎膿瘍 (s/p DJ stenting), UTI (<i>K. pneumoniae</i>), HTN, DM</p>
+<p><b>主訴：</b>半夜發燒/畏寒、輕度呼吸窘迫｜<b>PE：</b>Toxic, bilateral CVA knocking tenderness, CRT 3-4s</p>
+<p><b>Labs：</b>WBC 17k (L-shift)、CRP 331.6、Lactate 3.6、Cr 6.20、UA: pyuria + bacteriuria</p>
+<p>Impression: <b class="highlight">Urosepsis</b>。IV line 已建立，B/C&times;2 及 U/C 已送出，NS 快滴中。</p>
+<p>左圖為上次住院的尿液培養，當時使用 <b>Ceftriaxone</b> 治療。</p>
+<p><b>你要選擇哪個經驗性抗生素？</b></p>`,
+  choices:[
+    {label:'Ceftriaxone 2g IV Q24H',next:'shock', action(){S.abCorrect=false;S.abName='Ceftriaxone';S.decisions.push({point:'抗生素',chose:'Ceftriaxone',correct:false})}},
+    {label:'Ampicillin/Sulbactam 3g IV Q6H',next:'shock', action(){S.abCorrect=false;S.abName='Ampicillin/Sulbactam';S.decisions.push({point:'抗生素',chose:'Ampicillin/Sulbactam',correct:false})}},
+    {label:'Ciprofloxacin 400mg IV Q12H',next:'shock', action(){S.abCorrect=false;S.abName='Ciprofloxacin';S.decisions.push({point:'抗生素',chose:'Ciprofloxacin',correct:false})}},
+    {label:'Piperacillin/Tazobactam 4.5g IV Q6H',next:'shock', action(){S.abCorrect=true;S.abName='Piperacillin/Tazobactam';S.decisions.push({point:'抗生素',chose:'Piperacillin/Tazobactam',correct:true})}},
+    {label:'Cefepime 2g IV Q8H',next:'shock', action(){S.abCorrect=true;S.abName='Cefepime';S.decisions.push({point:'抗生素',chose:'Cefepime',correct:true})}},
+    {label:'Meropenem 1g IV Q8H',next:'shock', action(){S.abCorrect=true;S.abName='Meropenem';S.decisions.push({point:'抗生素',chose:'Meropenem',correct:true})}}
+  ]
+};
+
+case 'shock': return {
+  title:'血壓下降！', stage:2,
+  vitals:{hr:120,bp:'73/45',spo2:98,rr:24,temp:39.5,map:54},
+  img:'Scene_1.png',
+  html:`<p>抗生素開始滴注 30 分鐘後，護理師跑來通知你：</p>
+<p class="critical">「學長！病人血壓掉了！」</p>
+<p>病人意識仍清楚但明顯倦怠，四肢溫暖但 CRT 延長到 4-5 秒。已經給了 1000ml Normal Saline，尿量極少。</p>
+<p><b>你要怎麼處理？</b></p>`,
+  choices:[
+    {label:'先觀察，可能是暫時的低血壓',next:'shock_worse', action(){S.shockChoice='observe';S.decisions.push({point:'休克處理',chose:'觀察',correct:false})}},
+    {label:'再追加 Normal Saline 1000ml bolus',next:'shock_bounce', action(){S.shockChoice='fluid';S.decisions.push({point:'休克處理',chose:'僅追加 fluid',correct:false})}},
+    {label:'開始 Norepinephrine',next:'post_shock_ne', action(){S.shockChoice='ne_only';S.decisions.push({point:'休克處理',chose:'僅 NE',correct:false})}},
+    {label:'Crystalloid 500ml bolus + 開始 Norepinephrine',next:'source', action(){S.shockChoice='both';S.decisions.push({point:'休克處理',chose:'Fluid + NE',correct:true})}}
+  ]
+};
+
+case 'shock_worse': return {
+  title:'血壓持續下降', stage:2,
+  vitals:{hr:135,bp:'65/38',spo2:97,rr:28,temp:39.5,map:47},
+  img:'nervous_nurse_65_38.png',
+  html:`<p>你選擇先觀察，但 <b>5 分鐘後血壓進一步下降</b>。</p>
+<p>病人開始出現意識改變、四肢變涼。護理師焦急地看著你。</p>
+<p class="critical">你必須立即行動！</p>`,
+  choices:[{label:'Crystalloid 500ml bolus + 開始 Norepinephrine',next:'source'}]
+};
+
+case 'shock_bounce': return {
+  title:'血壓短暫回升', stage:2,
+  vitals:{hr:130,bp:'70/42',spo2:97,rr:26,temp:39.5,map:51},
+  img:'nurse_70_42.png',
+  html:`<p>追加 fluid 後，血壓短暫回升到 82/50，但 <b>5 分鐘後又掉回 70/42</b>。</p>
+<p>Septic shock 單靠 fluid 往往不夠。</p>
+<p><b>你還需要做什麼？</b></p>`,
+  choices:[{label:'開始 Norepinephrine',next:'source'}]
+};
+
+case 'post_shock_ne': return {
+  title:'升壓藥啟動', stage:2,
+  vitals:{hr:120,bp:'88/55',spo2:97,rr:24,temp:39.5,map:66},
+  html:`<p>Norepinephrine 開始後血壓逐漸回升。</p>
+<p>不過 Surviving Sepsis Campaign 建議：septic shock 應<b>同時給予 fluid resuscitation 和 vasopressor</b>，不需要等 fluid 給完才開始升壓藥。你追加了 crystalloid bolus。</p>`,
+  choices:[{label:'繼續',next:'source'}]
+};
+
+case 'source': return {
+  title:'血壓穩定，但持續少尿', stage:3,
+  vitals:{hr:116,bp:'90/56',spo2:97,rr:22,temp:39.2,map:67},
+  html:`<p>Norepinephrine 持續滴注中，血壓逐漸穩定在 MAP 65-70 mmHg。</p>
+<p>但你注意到：<b>Foley 放置後 1 小時內尿量僅 20 ml</b>。</p>
+<p>檢驗報告：<span class="critical">Cr 6.20、BUN 57、eGFR 9</span></p>
+<p>你回顧這位病人的過去病史：左輸尿管結石、腎膿瘍、DJ stenting...</p>
+<p><b>面對持續無尿的 AKI 病人，你下一步要做什麼？</b></p>
+<div id="freetext-hint" style="color:#dc2626;font-size:13px;margin-top:4px;display:none"></div>`,
+  choices:[
+    {label:'加大 IV fluid，增加腎臟灌流',next:'source_missed', action(){S.sourceChoice='fluid';S.decisions.push({point:'Source control',chose:'加大 fluid',correct:false})}},
+    {label:'Furosemide 40mg IV push 試利尿',next:'source_missed', action(){S.sourceChoice='furo';S.decisions.push({point:'Source control',chose:'Furosemide',correct:false})}},
+    {label:'Low-dose Dopamine 促進腎臟灌流',next:'source_missed', action(){S.sourceChoice='dopamine';S.decisions.push({point:'Source control',chose:'Low-dose Dopamine',correct:false})}},
+    {label:'抽血追蹤腎功能，觀察趨勢',next:'source_missed', action(){S.sourceChoice='labs';S.decisions.push({point:'Source control',chose:'追蹤腎功能',correct:false})}},
+    {label:'會診腎臟科安排透析',next:'nephro_redirect', action(){S.sourceChoice='nephro';S.decisions.push({point:'Source control',chose:'會診腎臟科',correct:false})}},
+    {label:'_freetext_',next:''}
+  ],
+  freetext:true
+};
+
+case 'source_missed': return {
+  title:'持續治療中', stage:3,
+  vitals:{hr:118,bp:'88/54',spo2:97,rr:24,temp:39.0,map:65},
+  html:`<p>${({fluid:'你加大了 fluid 給予量，但尿量仍然沒有改善。',furo:'你給了 Furosemide，但完全沒有尿量反應。',dopamine:'你開始了 low-dose Dopamine，但尿量沒有任何改善。研究顯示 renal-dose Dopamine 並不能改善 AKI 預後。',labs:'30 分鐘後追蹤報告回來：Cr 6.35（持續上升）。等待並沒有改善狀況。',nephro:''})[S.sourceChoice]||'你的處置沒有改善尿量。'}</p>
+<p>你決定先繼續目前的治療，密切觀察。</p>
+`,
+  choices:[{label:'繼續',next:'refractory_shock'}]
+};
+
+case 'nephro_redirect': return {
+  title:'腎臟科會診', stage:3,
+  vitals:{hr:116,bp:'90/56',spo2:97,rr:22,temp:39.0,map:67},
+  html:`<p>腎臟科醫師到場評估。</p>
+<p>他看了一下病歷後說：「這個病人有 DJ stent 的病史，而且現在 AKI 加上無尿 — <b>你要先做個 renal echo 排除阻塞</b>，再來討論透析的事。」</p>`,
+  choices:[{label:'安排 Renal echo',next:'echo_result', action(){S.echoFound=true;}}]
+};
+
+case 'echo_result': return {
+  title:'Renal Echo 結果', stage:3,
+  vitals:{hr:116,bp:'90/56',spo2:97,rr:22,temp:39.0,map:67},
+  img:'L_hydronephrosis.png',
+  html:`<p>Bedside renal echo 結果：</p>
+<ul>
+<li><b>IVC：1.9 cm</b>（容積狀態尚可）</li>
+<li><b>左腎：明顯水腎 (hydronephrosis)</b></li>
+<li>右腎：無明顯異常</li>
+</ul>
+<p>左側水腎，加上這位病人有 DJ stent 且目前嚴重感染...</p>
+<p><b>你要怎麼處理？</b></p>`,
+  choices:[
+    {label:'先觀察，DJ stent 應該有在引流',next:'pcn_missed', action(){S.decisions.push({point:'PCN 決策',chose:'觀察',correct:false})}},
+    {label:'會診放射科做 Left PCN 引流',next:'pcn_done', action(){S.sourceControl=true;S.decisions.push({point:'PCN 決策',chose:'Left PCN（放射科）',correct:true})}},
+    {label:'加強抗生素治療，等感染改善',next:'pcn_missed', action(){S.decisions.push({point:'PCN 決策',chose:'加強抗生素',correct:false})}},
+    {label:'會診泌尿科更換或調整 DJ stent',next:'pcn_urology', action(){S.decisions.push({point:'PCN 決策',chose:'會診泌尿科',correct:true})}}
+  ]
+};
+
+case 'pcn_done': return {
+  title:'Left PCN 完成', stage:3,
+  vitals:{hr:112,bp:'92/58',spo2:97,rr:22,temp:38.8,map:69},
+  html:`<p>放射科緊急完成 <b>Left Percutaneous Nephrostomy (PCN)</b>。</p>
+<p>引流出 <span class="critical">膿性尿液約 200ml</span>，確認了阻塞性感染的診斷。</p>
+<p>Source control 完成。繼續密切監測中。</p>`,
+  choices:[{label:'繼續',next:'refractory_shock'}]
+};
+
+case 'pcn_missed': return {
+  title:'繼續治療中', stage:3,
+  vitals:{hr:118,bp:'88/54',spo2:97,rr:24,temp:39.0,map:65},
+  html:`<p>你選擇了保守處理。感染源（阻塞的左側泌尿道）未得到處理。</p>
+<p>繼續目前的抗生素和支持性治療...</p>`,
+  choices:[{label:'繼續',next:'refractory_shock'}]
+};
+
+case 'pcn_urology': return {
+  title:'泌尿科會診回覆', stage:3,
+  vitals:{hr:116,bp:'90/56',spo2:97,rr:22,temp:39.0,map:67},
+  html:`<p>泌尿科醫師到場評估後表示：</p>
+<p>「目前病人仍在<b>急性感染期</b>，DJ stent 周圍組織腫脹發炎，<span class="critical">現在更換或調整 stent 風險太高</span>，容易造成穿孔和菌血症惡化。」</p>
+<p>「建議先請<b>放射科做 Percutaneous Nephrostomy (PCN)</b> 引流，等感染控制後再評估 stent 的處理。」</p>`,
+  choices:[{label:'會診放射科做 Left PCN',next:'pcn_done', action(){S.sourceControl=true;}}]
+};
+
+case 'refractory_shock': return {
+  title:'血壓持續不穩', stage:3,
+  vitals:{hr:122,bp:'82/48',spo2:97,rr:26,temp:38.8,map:59},
+  img:'refractory_shock.png',
+  html:`<p>${S.sourceControl?'PCN 引流完成後，血壓一度改善，但隨後又開始往下掉。':'儘管持續治療，血壓仍然不穩定。'}</p>
+<p>Norepinephrine 已經上調到 <b>20 ml/hr</b>，MAP 仍在 55-60 mmHg 徘徊。</p>
+<p>病人四肢冰冷，CRT 延長到 5 秒，尿量持續偏少。</p>
+<p class="critical">單一升壓藥似乎已經不夠了。</p>
+<p><b>你要怎麼處理？</b></p>`,
+  choices:[
+    {label:'追加 Crystalloid 1000ml bolus',next:'refractory_response', action(){S.refractoryChoice='fluid'}},
+    {label:'Norepinephrine 上調至 30 ml/hr',next:'refractory_response', action(){S.refractoryChoice='ne_up'}},
+    {label:'Hydrocortisone 100mg IV',next:'refractory_response', action(){S.refractoryChoice='steroid'}},
+    {label:'加上 Vasopressin + Hydrocortisone 100mg IV',next:'respiratory', action(){S.refractoryChoice='vaso_steroid'}}
+  ]
+};
+
+case 'refractory_response': return {
+  title:'處置效果', stage:3,
+  vitals:{hr:124,bp:'80/46',spo2:97,rr:28,temp:38.8,map:57},
+  html:`${({
+    fluid:'<p>你追加了 1000ml crystalloid，但血壓只短暫回升到 MAP 62，隨後又下降。</p><p>病人已經接受了大量 fluid resuscitation，<b>繼續灌水的邊際效益很低</b>，反而可能造成 fluid overload。</p>',
+    ne_up:'<p>你把 Norepinephrine 上調到 30 ml/hr，血壓暫時穩住 MAP 63。</p><p>但單一 vasopressor 持續高劑量有<b>周邊缺血</b>的風險，而且可能出現 tachyphylaxis。</p>',
+    steroid:'<p>你給了 Hydrocortisone，這是正確的方向！但在 refractory septic shock，<b>加上第二線 vasopressor (Vasopressin) 也同樣重要</b>。</p>'
+  })[S.refractoryChoice]||''}
+<p>最終你還是加上了 <b>Vasopressin + Hydrocortisone</b>，血壓逐漸穩定。</p>`,
+  choices:[{label:'繼續',next:'respiratory'}]
+};
+
+case 'respiratory': return {
+  title:'呼吸變化', stage:4,
+  vitals:{hr:125,bp:'88/52',spo2:99,rr:36,temp:38.5,map:64},
+  html:`<p>${S.sourceControl?'PCN 完成後約 2 小時':'又過了 2 小時'}，護理師通知你：</p>
+<p>「學長，病人看起來<b>呼吸有點費力</b>，而且呼吸好像有點快。」</p>
+<p>Monitor 上 <b>SpO2 維持 98-100%</b>。</p>
+<p>目前用藥：Norepinephrine 20 ml/hr + Vasopressin 6 ml/hr + Hydrocortisone</p>
+<p><b>你要怎麼做？</b></p>
+<div id="freetext-hint" style="color:#dc2626;font-size:13px;margin-top:4px;display:none"></div>`,
+  choices:[
+    {label:'SpO2 正常，先觀察',next:'deterioration', action(){S.respChoice='observe';S.decisions.push({point:'呼吸處理',chose:'觀察',correct:false})}},
+    {label:'給 Non-rebreather mask 或 NHF',next:'deterioration', action(){S.respChoice='o2';S.decisions.push({point:'呼吸處理',chose:'給氧',correct:false})}},
+    {label:'使用 NIV（非侵襲性正壓呼吸器）',next:'deterioration', action(){S.respChoice='niv';S.decisions.push({point:'呼吸處理',chose:'NIV',correct:false})}},
+    {label:'直接準備插管',next:'intubation_ok', action(){S.respChoice='intubate';S.timelyIntubation=true;S.decisions.push({point:'呼吸處理',chose:'直接插管',correct:true})}},
+    {label:'_freetext_',next:''}
+  ],
+  freetext:true
+};
+
+case 'abg_result': return {
+  title:'ABG 結果', stage:4,
+  vitals:{hr:128,bp:'85/50',spo2:99,rr:38,temp:38.5,map:62},
+  img:'deteroiate_ABG.png',
+  html:`<p>ABG 結果回報：</p>
+<p class="critical">pH 7.055 / PCO2 18.8 / HCO3 5.1 / BE -23.5</p>
+<p class="critical">Lactate：8.0 mmol/L</p>
+<p><b>嚴重代謝性酸中毒</b>，合併呼吸代償（Kussmaul breathing）。</p>
+<p>Lactate 從 3.6 飆升到 8.0，代表組織灌流持續惡化。</p>
+<p><b>看完 ABG，你的下一步是什麼？</b></p>`,
+  choices:[
+    {label:'Sodium Bicarbonate 矯正酸中毒',next:'deterioration', action(){S.decisions.push({point:'ABG 後決策',chose:'NaHCO3',correct:false})}},
+    {label:'加大 Norepinephrine 劑量',next:'deterioration', action(){S.decisions.push({point:'ABG 後決策',chose:'加大 NE',correct:false})}},
+    {label:'準備插管 + 機械通氣',next:'intubation_ok', action(){S.timelyIntubation=true;S.decisions.push({point:'ABG 後決策',chose:'插管',correct:true})}},
+    {label:'安排緊急透析',next:'deterioration', action(){S.decisions.push({point:'ABG 後決策',chose:'緊急透析',correct:false})}}
+  ]
+};
+
+case 'intubation_ok': return {
+  title:'及時插管', stage:4,
+  vitals:{hr:115,bp:'90/55',spo2:100,rr:'V:16',temp:38.5,map:67},
+  html:`<p>你決定立即插管。</p>
+<p>RSI (Rapid Sequence Intubation) 準備完成。在血行動力學密切監測下，順利完成氣管內插管。</p>
+<p>ETT 位置確認正確，接上呼吸器。病人呼吸做功大幅減少，vital signs 暫時穩定。</p>
+<p>${S.abgChecked?'':'<i>（雖然沒有先抽 ABG，但你的臨床判斷是正確的 — 這位病人需要插管。）</i>'}</p>`,
+  choices:[{label:'繼續',next:S.abCorrect?'icu':'culture_report'}]
+};
+
+case 'deterioration': return {
+  title:'病人意識改變！', stage:4,
+  vitals:{hr:140,bp:'75/40',spo2:80,rr:8,temp:38.5,map:52},
+  img:({observe:'emergen_ETI.png',o2:'emergen_ETI_NRM.png',niv:'emergen_ETI_NIV.png'})[S.respChoice]||'emergen_ETI.png',
+  html:`<p>${S.respChoice==='observe'?'你選擇繼續觀察，但':S.respChoice==='o2'?'你給了氧氣，SpO2 暫時維持。但 10 分鐘後':'幾分鐘後'}，護理師大喊：</p>
+<p class="critical">「病人意識不清了！SpO2 掉到 80%！」</p>
+<p>病人 GCS 從 E4V5M6 降到 E2V2M4。呼吸變得微弱、不規則。</p>
+<p class="critical">SpO2 持續下降：80% → 75% → 70%...</p>
+<p>呼吸肌已經疲勞衰竭，代償失敗。緊急插管！</p>
+<p>但在 hemodynamically unstable 的病人進行 crash intubation 的過程中...</p>`,
+  choices:[{label:'繼續',next:S.sourceControl?'ihca_rosc':'ihca_death', action(){S.timelyIntubation=false;}}]
+};
+
+case 'ihca_rosc': return {
+  title:'IHCA — 急救成功', stage:4,
+  vitals:{hr:110,bp:'80/50',spo2:95,rr:'V:16',temp:38.5,map:60},
+  html:`<p class="critical">插管過程中病人發生心跳停止 (IHCA)！</p>
+<p>立即開始 CPR。急救團隊到場。</p>
+<p>經過 <b>10 分鐘的急救</b>，恢復自發性循環 (ROSC)。</p>
+<p>插管完成，接上呼吸器。Vasopressor 加大劑量維持血壓。</p>
+<p><i>（因為之前有做 PCN 進行 source control，感染源有在處理中，病人有足夠的生理儲備撐過這次 IHCA。）</i></p>`,
+  choices:[{label:'繼續',next:S.abCorrect?'icu':'culture_report'}]
+};
+
+case 'ihca_death': return {
+  title:'IHCA — 急救失敗', stage:5,
+  vitals:{hr:'--',bp:'--/--',spo2:'--',rr:'--',temp:'--',map:'--'},
+  html:`<p class="critical">插管過程中病人發生心跳停止 (IHCA)！</p>
+<p>立即開始 CPR。急救團隊到場。</p>
+<p>持續急救 30 分鐘... 給予 Epinephrine 多次...</p>
+<p>但病人始終沒有恢復心跳。</p>
+<p class="critical">嚴重敗血症合併多重器官衰竭，感染源未得到控制，急救無效。</p>
+<p><b>宣布死亡。</b></p>`,
+  choices:[{label:'查看結局',next:'outcome'}]
+};
+
+case 'culture_report': return {
+  title:'培養結果回報', stage:4,
+  vitals:null,
+  html:`<p>此時微生物室打電話通知：</p>
+<p class="critical">「血液培養和尿液培養初步結果都是 <i>Klebsiella pneumoniae</i>，<br>對 ${S.abName} 呈現抗藥性！建議升階抗生素。」</p>
+<p>你立即將抗生素更換為 <b>Meropenem 1g IV Q8H</b>。</p>
+<p>但已經延誤了數小時的有效抗生素治療時間，這段期間細菌持續增殖，對器官造成了額外的傷害。</p>`,
+  choices:[{label:'繼續',next:'icu'}]
+};
+
+case 'icu': return {
+  title:'轉入加護病房', stage:5,
+  vitals:{hr:105,bp:'95/58',spo2:99,rr:'V:14',temp:38.0,map:70},
+  html:`<p>病人轉入加護病房 (ICU)。</p>
+<p>目前狀態：</p>
+<ul>
+<li>呼吸器使用中 (Mechanical ventilation)</li>
+<li>Vasopressor 持續使用</li>
+<li>CRRT 持續性腎臟替代治療進行中</li>
+${S.sourceControl?'<li>Left PCN 持續引流中</li>':''}
+<li>抗生素：${S.abCorrect?S.abName:'Meropenem（已升階）'}</li>
+</ul>`,
+  choices:[{label:'查看結局',next:'outcome'}]
+};
+
+case 'outcome': return {
+  title:'結局', stage:5,
+  vitals:null,
+  html: getOutcomeHTML(),
+  choices:[{label:'查看教學重點 (Debriefing)',next:'debrief'}]
+};
+
+case 'debrief': return {
+  title:'Debriefing — 教學重點', stage:5,
+  vitals:null,
+  html: getDebriefHTML(),
+  choices:[]
+};
+
+  } // end switch
+}
+
+// ======================== OUTCOME LOGIC ========================
+function getOutcomeType(){
+  if(!S.sourceControl && !S.timelyIntubation) return 'death';
+  if(S.sourceControl && S.timelyIntubation && S.abCorrect) return 'best';
+  if(S.sourceControl && !S.timelyIntubation) return 'ihca_survived';
+  return 'dialysis';
+}
+
+function getOutcomeHTML(){
+  const t = getOutcomeType();
+  const m = {
+    best: {cls:'outcome-best', title:'最佳結局：存活，脫離洗腎',
+      text:'經過 2 週的 ICU 治療，病人成功脫離呼吸器和升壓藥。<br>因為及時的抗生素、source control 和呼吸支持，腎功能逐漸恢復。<br>最終脫離透析，轉至普通病房，<b>3 週後順利出院</b>。'},
+    dialysis: {cls:'outcome-dialysis', title:'次佳結局：存活，但終身洗腎',
+      text:`在 ICU 住了 3-4 週。最終脫離呼吸器和升壓藥。<br>但由於${!S.abCorrect?'抗生素選擇延誤、':''}${!S.sourceControl?'未及時處理阻塞性水腎（感染源未控制）、':''}腎臟損傷過於嚴重。<br><b>腎功能無法恢復，需要終身透析。</b>`},
+    ihca_survived: {cls:'outcome-ihca', title:'不良結局：IHCA 後存活，終身洗腎',
+      text:'病人在急診經歷了 IHCA，幸好急救成功。<br>在 ICU 住了 4 週。因為 IHCA 造成的缺氧損傷加上原本的敗血症，腎功能無法恢復。<br><b>最終存活但需要終身透析。</b><br><i>如果能及時辨認 Kussmaul breathing 並插管，就能避免這次 IHCA。</i>'},
+    death: {cls:'outcome-death', title:'最差結局：死亡',
+      text:'病人在急診發生 IHCA。急救團隊全力搶救 30 分鐘，但因為：<br>• 感染源（阻塞性水腎）未得到控制<br>• 嚴重代謝性酸中毒未及時處理<br>• 多重器官衰竭<br><b>急救無效，宣布死亡。</b>'}
+  };
+  const o = m[t];
+  return `<div class="card ${o.cls}" style="margin:0 0 16px">
+    <h3>${o.title}</h3><p style="margin-top:8px">${o.text}</p></div>
+    <h3>你的決策摘要</h3>
+    <table class="debrief-table"><tr><th>決策點</th><th>你的選擇</th><th>結果</th></tr>
+    ${S.decisions.map(d=>`<tr><td>${d.point}</td><td>${d.chose}</td>
+    <td class="${d.correct?'tag-correct':'tag-wrong'}">${d.correct?'O':'X'}</td></tr>`).join('')}
+    </table>`;
+}
+
+// ======================== DEBRIEF ========================
+function getDebriefHTML(){
+  return `
+<div class="debrief-section">
+<h3>正確路徑</h3>
+<div class="tp-box" style="font-size:16px;line-height:2">
+Cefepime/Meropenem &rarr; Fluid + Norepinephrine &rarr; Renal echo &rarr; Left PCN<br>
+&rarr; 抽 ABG（發現嚴重酸中毒）&rarr; 及時插管 &rarr; ICU &rarr; <b>脫離洗腎出院</b>
+</div>
+</div>
+
+<div class="debrief-section">
+<h3>Teaching Point 1：經驗性抗生素選擇</h3>
+<div class="tp-box">
+<h4>為什麼要選 Cefepime 以上？</h4>
+<p>這位病人之前因 <i>K. pneumoniae</i> UTI 使用過 <b>Ceftriaxone</b>（3rd-gen cephalosporin）。</p>
+<p>先前暴露於 3rd-gen cephalosporin 是 <b>ESBL (Extended-Spectrum Beta-Lactamase)</b> 產生的重要風險因子。ESBL-producing 菌株對 ceftriaxone 和 ampicillin/sulbactam 都有抗藥性。</p>
+<p><b>經驗性抗生素選擇要考量：</b></p>
+<ul><li>過去培養結果和抗藥性</li><li>先前抗生素暴露史</li><li>當地抗藥性模式 (antibiogram)</li><li>感染嚴重度（septic shock 時要選最廣效的）</li></ul>
+<p>SSC Guidelines：對於 septic shock，應在 1 小時內給予適當的經驗性廣效抗生素。</p>
+</div>
+</div>
+
+<div class="debrief-section">
+<h3>Teaching Point 2：Septic Shock 初始處理</h3>
+<div class="tp-box">
+<h4>Hour-1 Bundle</h4>
+<ul>
+<li>量測 Lactate</li>
+<li>送 Blood culture（在抗生素之前）</li>
+<li>開始經驗性廣效抗生素</li>
+<li>如有低血壓或 Lactate &ge; 4：給予 <b>30 ml/kg crystalloid</b></li>
+<li>如 fluid 後仍低血壓：開始 <b>Norepinephrine</b>（首選 vasopressor）</li>
+</ul>
+<p><b>重點：不需要等 fluid resuscitation 完成才開始 vasopressor！</b>可以同時進行。</p>
+<p>Target：MAP &ge; 65 mmHg</p>
+</div>
+</div>
+
+<div class="debrief-section">
+<h3>Teaching Point 3：Source Control</h3>
+<div class="tp-box">
+<h4>Sepsis 的感染源控制</h4>
+<p>SSC Guidelines 強調：應盡快辨識並處理需要 source control 的感染源。</p>
+<p><b>這位病人的線索：</b></p>
+<ul>
+<li>已知左輸尿管結石 + DJ stent 留置</li>
+<li>之前有腎膿瘍病史</li>
+<li>現在 AKI + 無尿 &rarr; <b>必須排除阻塞性腎病變</b></li>
+</ul>
+<p><b>Renal echo</b> 是首選檢查（bedside、快速、無輻射）。發現 hydronephrosis 代表 DJ stent 可能阻塞或功能不足。</p>
+<p>處理：<b>Percutaneous Nephrostomy (PCN)</b> 緊急引流。在 sepsis 的情況下，每延遲 source control 一小時，死亡率都在增加。</p>
+</div>
+</div>
+
+<div class="debrief-section">
+<h3>Teaching Point 4：辨識 Kussmaul Breathing vs 呼吸衰竭</h3>
+<div class="tp-box">
+<h4>SpO2 正常 &ne; 不需要插管</h4>
+<p>這位病人的「喘」是 <b>Kussmaul breathing</b> — 嚴重代謝性酸中毒的呼吸代償。</p>
+<p>特徵：呼吸深且快，但 SpO2 正常（因為肺部本身沒有問題）。</p>
+<p><b>為什麼需要插管？</b></p>
+<ul>
+<li>pH 7.055 + HCO3 5.1 + Lactate 8：呼吸肌正在超負荷代償</li>
+<li>呼吸肌會疲勞 &rarr; 一旦失代償，CO2 急速上升 + 意識喪失 + SpO2 急降</li>
+<li>在 hemodynamically unstable 的病人做 <b>crash intubation</b> &rarr; 極高風險 cardiac arrest</li>
+<li>預防性 <b>elective intubation</b> 遠比 crash intubation 安全</li>
+</ul>
+<p class="critical">等到 SpO2 下降才插管 = 太晚了！</p>
+</div>
+</div>
+
+<div class="debrief-section">
+<h3>Key Takeaways</h3>
+<div class="tp-box">
+<ol style="padding-left:20px">
+<li><b>Sepsis 抗生素要考慮先前暴露和抗藥性風險</b></li>
+<li><b>Septic shock：Fluid + Vasopressor 同時進行</b></li>
+<li><b>AKI + 泌尿道病史 = 一定要影像排除阻塞</b></li>
+<li><b>Source control 是 sepsis 治療的核心</b></li>
+<li><b>SpO2 正常不代表呼吸穩定 — 看整體 picture</b></li>
+<li><b>嚴重酸中毒 + 呼吸費力 = 及時插管，不要等到 crash</b></li>
+</ol>
+</div>
+</div>
+
+<button class="restart-btn" onclick="resetState();go('intro')">重新開始</button>
+`;
+}
+
+// ======================== RENDER ========================
+function go(id){
+  S.scene=id;
+  const s=scene(id);
+  if(!s){document.getElementById('app').innerHTML='<p>Scene not found: '+id+'</p>';return;}
+  if(s.freetext) freetextTries=0;
+
+  let h='';
+  // Patient bar
+  h+=`<div class="patient-bar"><span><b>69M</b> | CAD, 左輸尿管結石 s/p DJ stent, UTI (KP), HTN, DM</span><span>Impression: <b>Urosepsis</b></span></div>`;
+
+  // Progress
+  const stages=['初始處置','休克處理','感染源控制','併發症處理','結局'];
+  h+='<div class="progress">';
+  stages.forEach((st,i)=>{
+    const cls=i+1<s.stage?'done':i+1===s.stage?'active':'';
+    h+=`<div class="prog-step ${cls}" title="${st}"></div>`;
+  });
+  h+='</div>';
+
+
+  // Card
+  h+='<div class="card">';
+  h+=`<h2>${s.title}</h2>`;
+
+  // Vitals
+  if(s.vitals){
+    h+='<div class="vitals">';
+    h+=vitalItem('HR',s.vitals.hr,'bpm',s.vitals.hr>100?'vred':'vgreen');
+    h+=vitalItem('BP',s.vitals.bp,'mmHg',parseBPSys(s.vitals.bp)<90?'vred':'vgreen');
+    h+=vitalItem('SpO2',s.vitals.spo2,'%',s.vitals.spo2<92?'vred':'vcyan');
+    h+=vitalItem('RR',s.vitals.rr,'/min',parseFloat(s.vitals.rr)>30?'vyellow':'vgreen');
+    h+=vitalItem('Temp',s.vitals.temp,'°C',s.vitals.temp>38?'vorange':'vgreen');
+    h+='</div>';
+  }
+
+  // Build choices HTML
+  let choicesHTML='';
+  if(s.choices && s.choices.length>0){
+    const realChoices=s.choices.filter(c=>c.label!=='_freetext_');
+    const hasFreetext=s.choices.some(c=>c.label==='_freetext_');
+    const colCls=realChoices.length<=1&&!hasFreetext?'single-col':'';
+    choicesHTML+=`<div class="choices ${colCls}">`;
+    realChoices.forEach((c,i)=>{
+      choicesHTML+=`<button class="cbtn" onclick="pick(${i})"><span class="key">${i+1}</span>${c.label}</button>`;
+    });
+    if(hasFreetext){
+      choicesHTML+=`<div class="cbtn" style="gap:6px">
+        <span class="key">&hellip;</span>
+        <input id="freetext-input" type="text" placeholder="其他處置（輸入後按 Enter）" style="flex:1;border:none;outline:none;font-size:13px;font-family:inherit;background:transparent" onkeydown="if(event.key==='Enter')submitFreetext()">
+        <button onclick="submitFreetext()" style="padding:2px 10px;border:1px solid #94a3b8;border-radius:4px;background:#f1f5f9;cursor:pointer;font-size:12px">送出</button>
+      </div>`;
+    }
+    choicesHTML+='</div>';
+  }
+
+  // Image scenes: two-column layout (text left, image right)
+  if(s.img){
+    h+='<div class="split">';
+    h+='<div class="split-body">';
+    h+=`<div class="narrative">${s.html}</div>`;
+    h+=choicesHTML;
+    h+='</div>';
+    h+=`<div class="split-img"><img src="${s.img}" alt="${s.title}"></div>`;
+    h+='</div>';
+  } else if(id==='debrief'){
+    // Debrief: scrollable
+    h+=`<div class="debrief-wrap">${s.html}</div>`;
+  } else {
+    h+=`<div class="narrative">${s.html}</div>`;
+    h+=choicesHTML;
+  }
+
+  h+='</div>'; // end card
+  document.getElementById('app').innerHTML=h;
+  window.scrollTo({top:0});
+}
+
+function pick(i){
+  const s=scene(S.scene);
+  const c=s.choices[i];
+  if(c.action) c.action();
+  // Re-evaluate next for dynamic scenes
+  let next=c.next;
+  if(S.scene==='intubation_ok'){
+    next=S.abCorrect?'icu':'culture_report';
+  }
+  if(S.scene==='deterioration'){
+    next=S.sourceControl?'ihca_rosc':'ihca_death';
+  }
+  go(next);
+}
+
+// ======================== FREETEXT ========================
+let freetextTries=0;
+function submitFreetext(){
+  const input=document.getElementById('freetext-input');
+  if(!input)return;
+  const val=input.value.trim().toLowerCase();
+  if(!val)return;
+  const hint=document.getElementById('freetext-hint');
+
+  if(S.scene==='source'){
+    const echoKeys=['echo','sono','ultrasound','超音波','腎臟超音波','腎超','sonography','us','renal echo','kidney echo','bed side','bedside','pu echo','pocus'];
+    const ctKeys=['ct','電腦斷層','computed'];
+    const isEcho=echoKeys.some(k=>val.includes(k));
+    const isCT=ctKeys.some(k=>val.includes(k));
+    if(isEcho){
+      S.sourceChoice='echo';S.echoFound=true;
+      S.decisions.push({point:'Source control',chose:'Renal echo（自行輸入）',correct:true});
+      go('echo_result');
+    } else if(isCT){
+      S.sourceChoice='ct';S.echoFound=true;
+      S.decisions.push({point:'Source control',chose:'CT（自行輸入）',correct:true});
+      go('echo_result');
+    } else {
+      freetextTries++;
+      if(hint){
+        if(freetextTries>=2){
+          hint.textContent='護理師執行了你的指示，但病人狀況沒有改善。請從選項中選擇。';
+          input.disabled=true;
+        } else {
+          hint.textContent='「'+input.value+'」已執行，但似乎對少尿沒有幫助。還有其他想法嗎？';
+          input.value='';
+        }
+        hint.style.display='block';
+      }
+    }
+  } else if(S.scene==='respiratory'){
+    const abgKeys=['abg','arterial blood gas','blood gas','動脈血','血液氣體','血氣'];
+    const isABG=abgKeys.some(k=>val.includes(k));
+    if(isABG){
+      S.respChoice='abg';S.abgChecked=true;
+      S.decisions.push({point:'呼吸處理',chose:'抽 ABG（自行輸入）',correct:true});
+      go('abg_result');
+    } else {
+      freetextTries++;
+      if(hint){
+        if(freetextTries>=2){
+          hint.textContent='你的處置沒有改善病人的呼吸狀態。請從選項中選擇。';
+          input.disabled=true;
+        } else {
+          hint.textContent='「'+input.value+'」已執行，但病人呼吸狀態沒有改善。還有其他想法嗎？';
+          input.value='';
+        }
+        hint.style.display='block';
+      }
+    }
+  }
+}
+
+// ======================== HELPERS ========================
+function vitalItem(label,val,unit,cls){
+  return `<div class="vitem"><div class="vlab">${label}</div><div class="vval ${cls}">${val}</div><div class="vlab">${unit}</div></div>`;
+}
+function parseBPSys(bp){
+  if(typeof bp==='string'){const p=bp.split('/');return parseInt(p[0])||0;}return 0;
+}
+function trackerTag(label,val,ok){
+  if(!val||val==='待決定') return `<span>${label}: 待決定</span>`;
+  return `<span class="done ${ok?'good':'bad'}">${label}: ${val}</span>`;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown',e=>{
+  const n=parseInt(e.key);
+  if(n>=1 && n<=9){
+    const s=scene(S.scene);
+    if(s && s.choices && s.choices[n-1]) pick(n-1);
+  }
+});
+
+// ======================== INIT ========================
+go('intro');
+</script>
+</body>
+</html>
