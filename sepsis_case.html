@@ -118,7 +118,7 @@ case 'shock': return {
   vitals:{hr:120,bp:'73/45',spo2:98,rr:24,temp:39.5,map:54},
   img:'Scene_1.png',
   html:`<p>抗生素開始滴注 30 分鐘後，護理師跑來通知你：</p>
-<p class="critical">「學長！病人血壓掉了！」</p>
+<p class="critical">「醫師！病人血壓掉了！」</p>
 <p>病人意識仍清楚但明顯倦怠，四肢溫暖但 CRT 延長到 4-5 秒。已經給了 1000ml Normal Saline，尿量極少。</p>
 <p><b>你要怎麼處理？</b></p>`,
   choices:[
@@ -273,7 +273,7 @@ case 'respiratory': return {
   title:'呼吸變化', stage:4,
   vitals:{hr:125,bp:'88/52',spo2:99,rr:36,temp:38.5,map:64},
   html:`<p>${S.sourceControl?'PCN 完成後約 2 小時':'又過了 2 小時'}，護理師通知你：</p>
-<p>「學長，病人看起來<b>呼吸有點費力</b>，而且呼吸好像有點快。」</p>
+<p>「醫師，病人看起來<b>呼吸有點費力</b>，而且呼吸好像有點快。」</p>
 <p>Monitor 上 <b>SpO2 維持 98-100%</b>。</p>
 <p>目前用藥：Norepinephrine 20 ml/hr + Vasopressin 6 ml/hr + Hydrocortisone</p>
 <p><b>你要怎麼做？</b></p>
