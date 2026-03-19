@@ -397,7 +397,7 @@ case 'debrief': return {
 // ======================== OUTCOME LOGIC ========================
 function getOutcomeType(){
   if(!S.sourceControl && !S.timelyIntubation) return 'death';
-  if(S.sourceControl && S.timelyIntubation && S.abCorrect) return 'best';
+  if(S.sourceControl && S.timelyIntubation) return 'best';
   if(S.sourceControl && !S.timelyIntubation) return 'ihca_survived';
   return 'dialysis';
 }
@@ -406,9 +406,11 @@ function getOutcomeHTML(){
   const t = getOutcomeType();
   const m = {
     best: {cls:'outcome-best', title:'最佳結局：存活，脫離洗腎',
-      text:'經過 2 週的 ICU 治療，病人成功脫離呼吸器和升壓藥。<br>因為及時的抗生素、source control 和呼吸支持，腎功能逐漸恢復。<br>最終脫離透析，轉至普通病房，<b>3 週後順利出院</b>。'},
+      text:S.abCorrect
+        ?'經過 2 週的 ICU 治療，病人成功脫離呼吸器和升壓藥。<br>因為及時的抗生素、source control 和呼吸支持，腎功能逐漸恢復。<br>最終脫離透析，轉至普通病房，<b>3 週後順利出院</b>。'
+        :'經過 3 週的 ICU 治療，病人成功脫離呼吸器和升壓藥。<br>雖然初始抗生素選擇不理想，但因培養結果回報後及時升階，加上適當的 source control 和呼吸支持，腎功能最終逐漸恢復。<br>最終脫離透析，轉至普通病房，<b>4 週後順利出院</b>。'},
     dialysis: {cls:'outcome-dialysis', title:'次佳結局：存活，但終身洗腎',
-      text:`在 ICU 住了 3-4 週。最終脫離呼吸器和升壓藥。<br>但由於${!S.abCorrect?'抗生素選擇延誤、':''}${!S.sourceControl?'未及時處理阻塞性水腎（感染源未控制）、':''}腎臟損傷過於嚴重。<br><b>腎功能無法恢復，需要終身透析。</b>`},
+      text:`在 ICU 住了 3-4 週。最終脫離呼吸器和升壓藥。<br>但由於未及時處理阻塞性水腎（感染源未控制），${!S.abCorrect?'加上初始抗生素選擇不理想，':''}腎臟損傷過於嚴重。<br><b>腎功能無法恢復，需要終身透析。</b>`},
     ihca_survived: {cls:'outcome-ihca', title:'不良結局：IHCA 後存活，終身洗腎',
       text:'病人在急診經歷了 IHCA，幸好急救成功。<br>在 ICU 住了 4 週。因為 IHCA 造成的缺氧損傷加上原本的敗血症，腎功能無法恢復。<br><b>最終存活但需要終身透析。</b><br><i>如果能及時辨認 Kussmaul breathing 並插管，就能避免這次 IHCA。</i>'},
     death: {cls:'outcome-death', title:'最差結局：死亡',
